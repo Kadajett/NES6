@@ -115,6 +115,10 @@
             this.p = this.getProcessorFlags();
         }
 
+        requestIrq(nmi) {
+            
+        }
+
         getProcessorFlags() {
             return +this.carryFlag | +this.zeroFlag << 1 | +this.interruptDisable << 2 | +this.decimalModeFlag << 3 | +this.breakCommand << 4 | 0x20 | +this.overflowFlag << 6 | +this.negativeFlag << 7;
         }

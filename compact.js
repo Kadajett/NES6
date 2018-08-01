@@ -116,6 +116,10 @@
             this.p = this.getProcessorFlags();
         }
 
+        requestIrq(nmi) {
+            
+        }
+
         getProcessorFlags() {
             return +this.carryFlag | +this.zeroFlag << 1 | +this.interruptDisable << 2 | +this.decimalModeFlag << 3 | +this.breakCommand << 4 | 0x20 | +this.overflowFlag << 6 | +this.negativeFlag << 7;
         }
@@ -396,6 +400,87 @@ class PPU {
         this.vramMirrorTable.forEach((vmt, index) => {
             vmt = index; // I think I am resetting this incorrectly. Will have to wait and see.
         });
+    }
+
+    setMirroring(mirroring) {
+        if(mirroring === this.currentMirroring) {
+            return;
+        }
+
+        this.currentMirroring = mirroring;
+        this.triggerRendering();
+
+        if(this.vramMirrorTable === null) {
+            this.vramMirrorTable = new Array(0x8000);
+        }
+        this.vramMirrorTable.forEach((vmt, index) => {
+            vmt = i;
+        });
+
+        // https://opcode-defined.quora.com/How-NES-Graphics-Work-Sprites-and-Palettes Is the best resource for learning about this. Drink some whiskey before you get into it. 
+        this.defineMirrorRegion(0x3F20, 0x3F00, 0x20);
+        this.defineMirrorRegion(0x3F40, 0x3F00, 0x20);
+        this.defineMirrorRegion(0x3F80, 0x3F00, 0x20);
+        this.defineMirrorRegion(0x3Fc0, 0x3F00, 0x20);
+
+        this.defineMirrorRegion(0x3000, 0x2000, 0xF00);
+        this.defineMirrorRegion(0x4000, 0x0000, 0x4000);
+
+        if(mirroring === this.nes.rom.HORIZONTAL_MIRRORING) {
+            this.ntable1[0] = 0;
+            this.ntable1[1] = 0;
+            this.ntable1[2] = 1;
+            this.ntable1[3] = 1;
+            
+            this.defineMirrorRegion(0x2400, 0x2000, 0x400);
+            this.defineMirrorRegion(0x2C00, 0x2800, 0x400);
+        } else if(mirroring === this.nes.rom.VERTICAL_MIRRORING) {
+            this.ntable1[0] = 0;
+            this.ntable1[1] = 1;
+            this.ntable1[2] = 0;
+            this.ntable1[3] = 1;
+            
+            this.defineMirrorRegion(0x2800, 0x2000, 0x400);
+            this.defineMirrorRegion(0x2C00, 0x2800, 0x400);
+        } else if(mirroring === this.nes.rom.SINGLESCREEN_MIRRORING) {
+            this.ntable1[0] = 0;
+            this.ntable1[1] = 0;
+            this.ntable1[2] = 0;
+            this.ntable1[3] = 0;
+            
+            this.defineMirrorRegion(0x2400, 0x2000, 0x400);
+            this.defineMirrorRegion(0x2800, 0x2000, 0x400);
+            this.defineMirrorRegion(0x2C00, 0x2000, 0x400);
+        } else if(mirroring === this.nes.rom.SINGLESCREEN_MIRRORING2) {
+            this.ntable1[0] = 1;
+            this.ntable1[1] = 1;
+            this.ntable1[2] = 1;
+            this.ntable1[3] = 1;
+            
+            this.defineMirrorRegion(0x2400, 0x2400, 0x400);
+            this.defineMirrorRegion(0x2800, 0x2400, 0x400);
+            this.defineMirrorRegion(0x2C00, 0x2400, 0x400);
+        } else {
+            // assume 4 screen mirroring
+            
+            this.ntable1[0] = 0;
+            this.ntable1[1] = 1;
+            this.ntable1[2] = 2;
+            this.ntable1[3] = 3;
+
+            // No mirroring region?
+        }
+    }
+
+    triggerRendering() {
+
+    }
+
+    defineMirrorRegion(fromStart, toStart, size) {
+        // think of this like a piston array. It mirrors at specific places through the engine non sequentially. 
+        for(let i = 0; i < size; i++) {
+            this.vramMirrorTable[fromStart+i] = toStart+i;
+        }
     }
 
     NameTable(x, y, index) {
