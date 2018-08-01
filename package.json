@@ -1,0 +1,22 @@
+{
+  "name": "nesjs",
+  "version": "0.0.1",
+  "description": "My first and not last attempt at a nes emulator",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm test",
+    "start": "nohup watchify index.js -o compact.js -v -t [ babelify --presets [ '@babel/preset-env', '@babel/preset-react' ]] &>/dev/null &"
+  },
+  "keywords": [
+    "nes",
+    "emulator",
+    "js"
+  ],
+  "author": "kadajett (jermy.ryan.stover@gmail.com)",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.0.0-beta.55",
+    "babelify": "^9.0.0",
+    "nodemon": "^1.18.3"
+  }
+}
