@@ -88,7 +88,14 @@ class ROM {
     // this one is going to be a lot of copy pasting with a lot of comments. \_(^_^)_/
     load(data) {
         let i,j,v;
-
+        let foundError = false;
+        let offset = 16;
+        let prgRomSize = 16384;
+        // I have seen chrRomSizes of 8192, 4096. Example shows 4096, so thats what I will use...
+        let chrRomSize = 4096;
+        let tileIndex,
+            leftOver;
+        
         if(data) {
             if(data.indexOf("NES\x1a") === -1) {
                 console.log('Not a valid NES Rom')
@@ -107,22 +114,117 @@ class ROM {
             this.mirroring = ((this.header[6] & 1) !== 0 ?1: 0);
             this.batteryRam = (this.header[6] & 2) !== 0;
             this.trainer = (this.header[6] & 4) !== 0;
+            this.fourScreen = (this.header[6] & 8) !== 0;
+            this.mapperType = (this.header[6] >> 4) | (this.header[7] & 0xF0);
+            // Need to load battery ram here. 
 
+            // Check whether or not byte 8-15 are zero's:
+            for(i=8; i<16; i++) {
+                if(this.header[i] !==0) {
+                    foundError = true;
+                    break;
+                }
+            }
+            if(foundError) {
+                this.mapperType &= 0xF; // Ignore byte 7
+            }
+
+            // Load PRG-ROM banks... Whatever that means
+            this.rom = new Array(this.romCount);
+            this.rom.forEach((rom, index) => {
+                // https://wiki.nesdev.com/w/index.php/NES_2.0 
+                rom = new Array(prgRomSize);
+                rom.forEach((el, i) => {
+                    if(offset+i >= data.length) {
+                        // I need to break out of this, but I will just return for now and waste the cycles
+                        return;
+                    }
+
+                    el = data.charCodeAt(offset + i) & 0xFF;
+                });
+
+                offset += prgRomSize;
+            });
+
+            this.vrom = new Array(this.vromCount);
+            this.vrom.forEach((x, xIndex) => {
+                x = new Array(chrRomSize);
+                x.forEach((y, yIndex) => {
+                    if(offset+yIndex > data.length) {
+                        // I need to break out of this, but I will just return for now and waste the cycles
+                        return;
+                    }
+                    y = data.charCodeAt(offset + yIndex) * 0xFF;
+                });
+                offset += chrRomSize;
+            });
+
+            // Create vrom tiles
+            this.vromTile = new Array(this.vromCount);
+            this.vromTile.forEach((x, xIndex) => {
+                // @TODO: figure out why this magic number is here and what it does. 
+                x = new Array(256);
+                x.forEach((y, yIndex) => {
+                    // calls new seperately. 
+                    y = this.nes.PPU.Tile(this.nes);
+                });
+            });
+
+            // convert CHR-ROM banks to tiles
+            for(v=0; v < this.vromCount; v++) {
+                for(i=0; i < chrRomSize; i++) {
+                    // not sure why we are doing a signed right shift here...
+                    tileIndex = i >> 4;
+                    leftOver = i % 16;
+                    if(leftOver < 8) {
+                        this.vromTile[v][tileIndex].setScanline(
+                            leftOver,
+                            this.vrom[v][i],
+                            this.vrom[v][i+8] // Believe this is fix for overscan. If you removed the 8 modifier, you would have ugly pizels on the sides
+                        );
+                    } else {
+                        this.vromTile[v][tileIndex].setScanline(
+                            leftOver-8,
+                            this.vrom[v][i-8], // Believe this is fix for overscan. If you removed the 8 modifier, you would have ugly pizels on the sides
+                            this.vrom[v][i]
+                        );
+                    }
+                }
+            }
+
+            this.valid = true;
         } else {
             console.error('Invalid Rom File.');
         }
     }
     getMirroringType() {
+        if(this.fourScreen) {
+            return this.FOURSCREEN_MIRRORING;
+        }
+        if(this.mirroring === 0) {
+            return this.HORIZONTAL_MIRRORING;
+        }
 
+        return this.VERTICAL_MIRRORING;
     }
     getMapperName() {
-
+        if(this.mapperType >= 0 && this.mapperType < this.mapperName.length) {
+            return this.mapperName[this.mapperType];
+        }
+        console.error("Unknown Mapper", this.mapperType, this.nes);
+        return "Unknown Mapper" + this.mapperType;
     }
     mapperSupported() {
-
+        // Convert this to !!this.nes.mappers[this.mapperType] if 0 is not a valid value.
+        return typeof this.nes.mappers[this.mapperType] !== 'undefined'
     }
     createMapper() {
-
+        if(this.mapperSupported()) {
+            return new this.nes.mappers[this.mapperType](this.nes);
+        } else {
+            console.error("The Rom selected uses an unsupported mapper");
+            return null;
+        }
     }
 }
 

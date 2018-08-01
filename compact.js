@@ -166,6 +166,7 @@ const CPU = require('./cpu');
 const Program = require('./program');
 const Mapper = require('./mapper');
 const ROM = require('./rom');
+const PPU = require('./ppu');
 
 
 class NES {
@@ -179,6 +180,7 @@ class NES {
             this.mapper = new Mapper(this);
             this.cpu = new CPU(this);
             this.rom = new ROM(this);
+            this.ppu = new PPU(this);
             // this.program = null;
         }
 
@@ -238,7 +240,7 @@ class NES {
             }
 
             // Update status to loading rom
-            this.rom = new JSNES.ROM(this);
+            this.rom = new ROM(this);
             this.rom.load(data);
 
             if(this.rom.valid) {
@@ -274,7 +276,117 @@ class NES {
 
     module.exports = NES;
 
-},{"./cpu":1,"./mapper":3,"./program":5,"./rom":6}],5:[function(require,module,exports){
+},{"./cpu":1,"./mapper":3,"./ppu":5,"./program":6,"./rom":7}],5:[function(require,module,exports){
+
+class PPU {
+    constructor(nes) {
+        this.nes = nes;
+
+        this.STATUS_VRAMWRITE = 4;
+        this.STATUS_SLSSPRITECOUNT = 5;
+        this.STATUS_SPRITE0HIT = 6
+
+        this.vramMem = null;
+        this.spriteMem = null;
+        this.vramAddress = null;
+        this.vramTmpAddress = null;
+        this.vramBufferedReadValue = null;
+        this.firstWrite = null;
+        this.sramAddress = null;
+        this.currentMirroring = null;
+        this.requestEndFrame = null;
+        this.nmiOk = null;
+        this.dummyCycleToggle = null;
+        this.validTileData = null;
+        this.nmiCounter = null;
+        this.scanlineAlreadyRendered = null;
+        this.f_nmiOnVblank = null;   
+        this.f_spriteSize = null;
+        this.f_bgPatternTable = null;
+        this.f_spPatternTable = null;
+        this.f_addrInc = null;
+        this.f_nTblAddress = null;
+        this.f_color = null;
+        this.f_spVisibility = null;
+        this.f_bgVisibility = null;
+        this.f_spClipping = null;
+        this.f_bgClipping = null;
+        this.f_dispType = null;
+        this.cntFV = null;
+        this.cntV = null;
+        this.cntH = null;
+        this.cntVT = null;
+        this.cntHT = null;
+        this.regFV = null;
+        this.regV = null;
+        this.regH = null;
+        this.regVT = null;
+        this.regHT = null;
+        this.regFH = null;
+        this.regS = null;
+        this.curNt = null;
+        this.attrib = null;
+        this.buffer = null;
+        this.prevBuffer = null;
+        this.bgbuffer = null;
+        this.pixrendered = null;
+        
+        this.validTileData = null;
+        this.scantile = null;
+        this.scanline = null;
+        this.lastRenderedScanline = null;
+        this.curX = null;
+        this.sprX = null; 
+        this.sprY = null; 
+        this.sprTile = null; 
+        this.sprCol = null; 
+        this.vertFlip = null; 
+        this.horiFlip = null; 
+        this.bgPriority = null; 
+        this.spr0HitX = null; 
+        this.spr0HitY = null; 
+        this.hitSpr0 = null;
+        this.sprPalette = null;
+        this.imgPalette = null;
+        this.ptTile = null;
+        this.ntable1 = null;
+        this.currentMirroring = null;
+        this.nameTable = null;
+        this.vramMirrorTable = null;
+        this.palTable = null;
+        
+        
+        // Rendering Options:
+        this.showSpr0Hit = false;
+        this.clipToTvSize = true;
+        
+        this.reset();
+    }
+
+    reset() {
+
+    }
+
+    Tile(data) {
+        return new Tile(this.nes, data);
+    }
+}
+
+// This is an antipattern, but the seperation of concerns in the nes is friggin weird.
+class Tile {
+    constructor(nes, data) {
+        this.nes = nes;
+        this.data = data;
+    }
+
+    setScanline(x,y,z) {
+
+    }
+}
+
+module.exports = PPU;
+
+},{}],6:[function(require,module,exports){
 
     class Program {
 
@@ -293,7 +405,7 @@ class NES {
 
     module.exports = Program;
 
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 class ROM {
 
     constructor(nes) {
@@ -384,7 +496,14 @@ class ROM {
     // this one is going to be a lot of copy pasting with a lot of comments. \_(^_^)_/
     load(data) {
         let i,j,v;
-
+        let foundError = false;
+        let offset = 16;
+        let prgRomSize = 16384;
+        // I have seen chrRomSizes of 8192, 4096. Example shows 4096, so thats what I will use...
+        let chrRomSize = 4096;
+        let tileIndex,
+            leftOver;
+        
         if(data) {
             if(data.indexOf("NES\x1a") === -1) {
                 console.log('Not a valid NES Rom')
@@ -403,22 +522,117 @@ class ROM {
             this.mirroring = ((this.header[6] & 1) !== 0 ?1: 0);
             this.batteryRam = (this.header[6] & 2) !== 0;
             this.trainer = (this.header[6] & 4) !== 0;
+            this.fourScreen = (this.header[6] & 8) !== 0;
+            this.mapperType = (this.header[6] >> 4) | (this.header[7] & 0xF0);
+            // Need to load battery ram here. 
 
+            // Check whether or not byte 8-15 are zero's:
+            for(i=8; i<16; i++) {
+                if(this.header[i] !==0) {
+                    foundError = true;
+                    break;
+                }
+            }
+            if(foundError) {
+                this.mapperType &= 0xF; // Ignore byte 7
+            }
+
+            // Load PRG-ROM banks... Whatever that means
+            this.rom = new Array(this.romCount);
+            this.rom.forEach((rom, index) => {
+                // https://wiki.nesdev.com/w/index.php/NES_2.0 
+                rom = new Array(prgRomSize);
+                rom.forEach((el, i) => {
+                    if(offset+i >= data.length) {
+                        // I need to break out of this, but I will just return for now and waste the cycles
+                        return;
+                    }
+
+                    el = data.charCodeAt(offset + i) & 0xFF;
+                });
+
+                offset += prgRomSize;
+            });
+
+            this.vrom = new Array(this.vromCount);
+            this.vrom.forEach((x, xIndex) => {
+                x = new Array(chrRomSize);
+                x.forEach((y, yIndex) => {
+                    if(offset+yIndex > data.length) {
+                        // I need to break out of this, but I will just return for now and waste the cycles
+                        return;
+                    }
+                    y = data.charCodeAt(offset + yIndex) * 0xFF;
+                });
+                offset += chrRomSize;
+            });
+
+            // Create vrom tiles
+            this.vromTile = new Array(this.vromCount);
+            this.vromTile.forEach((x, xIndex) => {
+                // @TODO: figure out why this magic number is here and what it does. 
+                x = new Array(256);
+                x.forEach((y, yIndex) => {
+                    // calls new seperately. 
+                    y = this.nes.PPU.Tile(this.nes);
+                });
+            });
+
+            // convert CHR-ROM banks to tiles
+            for(v=0; v < this.vromCount; v++) {
+                for(i=0; i < chrRomSize; i++) {
+                    // not sure why we are doing a signed right shift here...
+                    tileIndex = i >> 4;
+                    leftOver = i % 16;
+                    if(leftOver < 8) {
+                        this.vromTile[v][tileIndex].setScanline(
+                            leftOver,
+                            this.vrom[v][i],
+                            this.vrom[v][i+8] // Believe this is fix for overscan. If you removed the 8 modifier, you would have ugly pizels on the sides
+                        );
+                    } else {
+                        this.vromTile[v][tileIndex].setScanline(
+                            leftOver-8,
+                            this.vrom[v][i-8], // Believe this is fix for overscan. If you removed the 8 modifier, you would have ugly pizels on the sides
+                            this.vrom[v][i]
+                        );
+                    }
+                }
+            }
+
+            this.valid = true;
         } else {
             console.error('Invalid Rom File.');
         }
     }
     getMirroringType() {
+        if(this.fourScreen) {
+            return this.FOURSCREEN_MIRRORING;
+        }
+        if(this.mirroring === 0) {
+            return this.HORIZONTAL_MIRRORING;
+        }
 
+        return this.VERTICAL_MIRRORING;
     }
     getMapperName() {
-
+        if(this.mapperType >= 0 && this.mapperType < this.mapperName.length) {
+            return this.mapperName[this.mapperType];
+        }
+        console.error("Unknown Mapper", this.mapperType, this.nes);
+        return "Unknown Mapper" + this.mapperType;
     }
     mapperSupported() {
-
+        // Convert this to !!this.nes.mappers[this.mapperType] if 0 is not a valid value.
+        return typeof this.nes.mappers[this.mapperType] !== 'undefined'
     }
     createMapper() {
-
+        if(this.mapperSupported()) {
+            return new this.nes.mappers[this.mapperType](this.nes);
+        } else {
+            console.error("The Rom selected uses an unsupported mapper");
+            return null;
+        }
     }
 }
 

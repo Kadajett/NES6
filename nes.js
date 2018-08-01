@@ -4,6 +4,7 @@ const CPU = require('./cpu');
 const Program = require('./program');
 const Mapper = require('./mapper');
 const ROM = require('./rom');
+const PPU = require('./ppu');
 
 
 class NES {
@@ -17,6 +18,7 @@ class NES {
             this.mapper = new Mapper(this);
             this.cpu = new CPU(this);
             this.rom = new ROM(this);
+            this.ppu = new PPU(this);
             // this.program = null;
         }
 
@@ -76,7 +78,7 @@ class NES {
             }
 
             // Update status to loading rom
-            this.rom = new JSNES.ROM(this);
+            this.rom = new ROM(this);
             this.rom.load(data);
 
             if(this.rom.valid) {
