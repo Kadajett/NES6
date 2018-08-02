@@ -40,6 +40,8 @@
             // 7 => Negative
             this.p = null;
 
+            this.IRQ_NMI = null; // @TODO: Set this properly
+
             // Part of the Processor Status register
             this.carryFlag = false;
             this.zeroFlag = false;
@@ -116,7 +118,7 @@
         }
 
         requestIrq(nmi) {
-            
+            // @TODO: write the interrupt logic
         }
 
         getProcessorFlags() {

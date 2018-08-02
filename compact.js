@@ -41,6 +41,8 @@
             // 7 => Negative
             this.p = null;
 
+            this.IRQ_NMI = null; // @TODO: Set this properly
+
             // Part of the Processor Status register
             this.carryFlag = false;
             this.zeroFlag = false;
@@ -117,7 +119,7 @@
         }
 
         requestIrq(nmi) {
-            
+            // @TODO: write the interrupt logic
         }
 
         getProcessorFlags() {
@@ -281,7 +283,10 @@ class NES {
     module.exports = NES;
 
 },{"./cpu":1,"./mapper":3,"./ppu":5,"./program":6,"./rom":7}],5:[function(require,module,exports){
-
+/**
+ * PPU Picture Processing Unit
+ * https://wiki.nesdev.com/w/index.php/PPU
+ */
 class PPU {
 
     constructor(nes) {
@@ -290,11 +295,22 @@ class PPU {
 
         this.STATUS_VRAMWRITE = 4;
         this.STATUS_SLSSPRITECOUNT = 5;
-        this.STATUS_SPRITE0HIT = 6
+        this.STATUS_SPRITE0HIT = 6;
+        this.STATUS_VBLANK = 7;
 
         // Rendering Options:
         this.showSpr0Hit = false;
         this.clipToTvSize = true;
+
+        /**
+         * used for drawing a background color on monochrome displays
+         */
+        this.internalColorPalette = {
+            red: 0x0000FF,
+            black: 0x0,
+            green: 0x00FF00,
+            blue: 0xFF0000
+        };
         
         this.reset();
     }
@@ -341,28 +357,40 @@ class PPU {
 
     // f_ denotes a flag. usually a boolean value. 
     resetControlFlags() {
-        // Control Flags Register 1
+        /**
+         * Control Flags Register 1
+         */
         this.f_nmiOnVblank = 0;
-        this.f_spriteSize = 0; // 0=8x8, 1=8x16
+        /**
+         * possible values of
+         * 0=8x8, 1=8x16
+         */
+        this.f_spriteSize = 0; 
         this.f_bgPatternTable = 0;
         this.f_spPatternTable = 0;
         this.f_addrInc = 0;
         this.f_nTblAddress = 0;
 
         // Register 2
-        /*
-        * @var {number} 
+        /** 
+        * Flags
         */
-        this.f_color = 0; // 0,2,4
-        this.f_spVisibility = 0; // Sprite visibility 0,1
-        this.f_bgVisibility = 0;
-        this.f_spClipping = 0;
-        this.f_bgClipping = 0;
-        this.f_dispType = 0;
+        this.f_color = this.f_spVisibility = this.f_bgVisibility = this.f_spClipping = this.f_bgClipping = this.f_dispType = 0;
     }
 
     resetCounters() {
+        /**
+         * Registers
+         */
         this.regV = this.regFV = this.regFH = this.regH = this.regVT = this.regHT = this.regFH = this.regS = 0;
+
+        /**
+         * Counters
+         */
+        this.cntFV = this.cntV = this.cntH = this.cntVT = this.cntHT = null;
+
+
+        this.nmiCounter = 0;
     }
 
     resetVramIO() {
@@ -462,7 +490,7 @@ class PPU {
             this.defineMirrorRegion(0x2C00, 0x2400, 0x400);
         } else {
             // assume 4 screen mirroring
-            
+
             this.ntable1[0] = 0;
             this.ntable1[1] = 1;
             this.ntable1[2] = 2;
@@ -481,6 +509,184 @@ class PPU {
         for(let i = 0; i < size; i++) {
             this.vramMirrorTable[fromStart+i] = toStart+i;
         }
+    }
+
+    startVBlank() {
+        // Do NMI Non Maskable Interrupt
+        this.nes.cpu.requestIrq(this.nes.cpu.IRQ_NMI);
+
+        // make sure everything is rendered
+        // 239 because the PPU generates a video signal with 240 lines of pixels
+        if(this.lastRenderedScanline < 239) {
+            this.renderFramePartially(
+                this.lastRenderedScanline + 1,
+                240 - this.lastRenderedScanline
+            )
+        }
+
+        this.endFrame();
+        this.resetLastRenderedScanline();
+    }
+
+    endScanline() {
+        switch(this.scanline) {
+            case 19: 
+                // Dummy scanline
+                if(this.dummyCycleToggle){
+                    // removes the dummy pixel at the end of each scanline
+                    this.curX = 1;
+                }
+                break;
+            
+            case 20: 
+                // Clear VBlank flag? 
+                this.setStatusFlag(this.STATUS_VBLANK, false);
+
+                // clear Sprite #0 hit flag
+                this.setStatusFlag(this.STATUS_SPRITE0HIT, false);
+                this.hitSpr0 = false;
+                this.spr0HitX = this.spr0HitY = -1;
+
+                if(this.f_bgVisibility == 1 || this.f_spVisibility == 1) {
+                    // setting the counters to what is held in the faux-registers? 
+                    this.cntFV = this.regFV;
+                    this.cntV = this.regV;
+                    this.cntH = this.regH;
+                    this.cntVT = this.regVT;
+                    this.cntHT = this.regHT;
+
+                    if(this.f_bgVisibility == 1) {
+                        // Render dummy scanline
+                        this.renderBGScanline(false, 0);
+                    }
+                }
+                // Sadly, the flags arent booleans and arent always 0 || 1. In this case they are, so I can booleanify them. 
+                if(!!this.f_bgVisibility && !!this.f_spVisibility) {
+                    // Check sprite0 hit for first scanline
+                    this.checkSprite0(0)
+                }
+
+                if(!!this.f_bgVisibility || !!this.f_spVisibility) {
+                    this.nes.mmap.clockIrqCounter();
+                }
+                break;
+            
+            case 261: 
+                // Dead scanline do not render
+                this.setStatusFlag(this.STATUS_VBLANK, true);
+                this.requestEndFrame = true;
+                this.nmiCounter = 9;
+
+                // Wrap around
+                this.scanline = -1; // will be incremented to 0 later
+                break;
+            default: 
+                if(this.scanline > 21 && this.scanline <= 260) {
+                    // Render normally
+                    if(this.f_bgVisibility == 1) {
+                        if(!this.scanlineAlreadyRendered) {
+                            this.cntHT = this.regHT;
+                            this.cntH = this.regH;
+                            this.renderBGScanline(true, this.scanline - 20);
+                        }
+                        this.scanlineAlreadyRendered = false;
+
+                        // Check for sprite 0
+                        if(!this.hitSpr0 && this.f_spVisibility == 1) {
+                            if(Array.isArray(this.sprX) &&
+                            Array.isArray(this.sprY) &&
+                            this.sprx[0] >= -7 &&
+                            this.sprY[0] + 1 <= (this.scanline - 20) &&
+                            (this.sprY[0] + 1 + (this.f_spriteSize === 0 ? 8:16)) >= (this.scanline - 20)) {
+                                if(this.checkSprite0(this.scanline - 20)) {
+                                    this.hitSpr0 = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if(this.f_bgVisibility == 1 || this.f_spVisibility == 1) {
+                    // clock mapper irq counter. Whatever that means...
+                    this.nes.mmap.clockIrqCounter();
+                }
+        }
+
+        this.scanline ++;
+        this.regsToAddress();
+        this.cntsToAddress();
+    }
+
+    /**
+     * Prepare frame for display. Includes decideing the background color and creating the pixel buffer
+     */
+    startFrame() {
+        let bgColor = 0;
+        let buffer = this.buffer;
+        let i;
+        let pixrendered = this.pixrendered;
+
+
+        // set background color
+        if(this.f_dispType === 0) {
+            // color display
+            bgColor = this.imgPalette[0];
+        } else {
+            switch (this.f_color) {
+                case 0:
+                    bgColor = this.internalColorPalette.black;
+                    break;
+                case 1:
+                    bgColor = this.internalColorPalette.green;
+                    break;
+                case 2:
+                    bgColor = this.internalColorPalette.blue;
+                    break;
+                case 3:
+                    bgColor = this.internalColorPalette.black;
+                    break;
+                case 4:
+                    bgColor = this.internalColorPalette.red;
+                    break; 
+                default: 
+                    bgColor = this.internalColorPalette.black;
+            }
+        }
+    }
+
+    regsToAddress() {
+
+    }
+
+    cntsToAddress() {
+
+    }
+
+    checkSprite0(line) {
+        // @TODO: do this
+    }
+
+    renderBGScanline() {
+        // @TODO: Do this
+    }
+
+    setStatusFlag(title, flag) {
+        if(typeof title === 'boolean' && typeof flag === 'boolean') {
+            title = flag;
+        }
+    }
+
+    resetLastRenderedScanline() {
+        // just doing this in a function so I can easily track when it happens during debugging. 
+        this.lastRenderedScanline = -1;
+    }
+
+    endFrame() {
+        // @TODO: Finish this
+    }
+
+    renderFramePartially(startLine, stopLine) {
+        // @TODO: finish this
     }
 
     NameTable(x, y, index) {
