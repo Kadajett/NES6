@@ -192,7 +192,7 @@ class ROM {
                 }
             }
 
-            this.valid = true;
+            this.valid = true;7
         } else {
             console.error('Invalid Rom File.');
         }
