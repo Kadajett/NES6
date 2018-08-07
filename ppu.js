@@ -53,7 +53,11 @@ class PPU {
 
     resetRenderingVars() {
         this.attrib = this.scantile = new Array(32);
-        this.buffer = this.prevBuffer = this.bgbuffer = this.pixrendered = new Array(256*240);
+        this.bufferSize = {
+            x: 256,
+            y: 240
+        }
+        this.buffer = this.prevBuffer = this.bgbuffer = this.pixrendered = new Array(this.bufferSize.x * this.bufferSize.y);
         this.validTileData = null;
         this.sprPalette = this.imgPalette = new Array(16);
     }
@@ -345,6 +349,7 @@ class PPU {
         // set background color
         if(this.f_dispType === 0) {
             // color display
+            // Use first entry in palette as BG Color
             bgColor = this.imgPalette[0];
         } else {
             switch (this.f_color) {
@@ -358,14 +363,76 @@ class PPU {
                     bgColor = this.internalColorPalette.blue;
                     break;
                 case 3:
+                    // Invalid, use black
                     bgColor = this.internalColorPalette.black;
                     break;
                 case 4:
                     bgColor = this.internalColorPalette.red;
                     break; 
                 default: 
+                    // invalid, use black
                     bgColor = this.internalColorPalette.black;
             }
+        }
+
+        buffer.forEach(element => {
+            element = bgColor;
+        });
+        pixrendered.forEach(element => {
+            element = 65;
+        });
+    }
+
+    endFrame() {
+        // @TODO: Finish this
+        let i, x, y, buffer = this.buffer;
+        let red = 0x55FF55; // this is different from the original red for some reason? 
+        // Very drunk while writing this. Sorry for the crappy code!
+        if(this.showSpr0Hit) {
+            if(this.sprX[0] >= 0 && this.sprX[0] < this.bufferSize.x && this.sprY[0] >= 0 && this.sprY[0] < this.bufferSize.y) {
+                for(i = 0; i < this.bufferSize.x; i++){
+                    buffer[(this.sprY[0] << 8) + i] = red;
+                    if(i < this.bufferSize.y) {
+                        buffer[(i << 8) + this.sprX[0]] = red; // what would happen if I change this value? Play around with it... 
+                    }
+                }
+                
+            }
+            if(this.spr0HitX >= 0 && this.spr0HitX < this.bufferSize.x && this.spr0HitY >= 0 && this.spr0HitY < this.bufferSize.y) {
+                for(i = 0; i < this.bufferSize.x; i++){
+                    buffer[(this.spr0HitY << 8) + i] = red;
+                    if(i < this.bufferSize.y) {
+                        buffer[(i << 8) + this.spr0HitX] = red; // what would happen if I change this value? Play around with it... 
+                    }
+                }
+                
+            }
+        }
+
+        // if either the sprite or the bg is clipped, clip both. Fix later? 
+        if(this.clipToTvSize || this.f_bgClipping === 0 || this.f_spClipping === 0) {
+            /**
+             * This is where we do the clipping for the screen edges
+             */
+            // clip left 8 pixels
+            for(y = 0; y < this.bufferSize.y; y++) {
+                for(x = 0; x < 8; x++) {
+                    buffer[(y << 8) + x] = 0;
+                }
+            }
+        }
+
+        if(this.clipToTvSize) {
+            for(y = 0; y < 8 y++) {
+                for(x = 0; x < this.bufferSize.x; x++) {
+                    buffer[(y << 8) + x] = 0;
+                    buffer[((239 - y) << 8) + x] = 0;
+                }
+            }
+        }
+
+        if(this.nes.opts.showDisplay) {
+            // this.nes.ui.writeFrame(buffer, this.prevBuffer);
         }
     }
 
@@ -394,10 +461,6 @@ class PPU {
     resetLastRenderedScanline() {
         // just doing this in a function so I can easily track when it happens during debugging. 
         this.lastRenderedScanline = -1;
-    }
-
-    endFrame() {
-        // @TODO: Finish this
     }
 
     renderFramePartially(startLine, stopLine) {
