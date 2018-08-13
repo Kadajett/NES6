@@ -2,6 +2,11 @@
  * PPU Picture Processing Unit
  * https://wiki.nesdev.com/w/index.php/PPU
  */
+
+const { Tile } = require('./tile');
+const { NameTable } = require('./nameTable');
+const { PaletteTable } = require('./paletteTable');
+
 class PPU {
 
     constructor(nes) {
@@ -427,7 +432,7 @@ class PPU {
                 for(x = 0; x < this.bufferSize.x; x++) {
                     buffer[(y << 8) + x] = 0;
                     buffer[((239 - y) << 8) + x] = 0;
-                }
+                }1
             }
         }
 
@@ -475,44 +480,6 @@ class PPU {
     Tile(data) {
         // Should probably just return a reference to the class
         return new Tile(this.nes, data);
-    }
-}
-
-// This is an antipattern, but the seperation of concerns in the nes is friggin weird.
-class Tile {
-
-    constructor(nes, data) {
-        this.nes = nes;
-        this.data = data;
-    }
-
-    setScanline(x,y,z) {
-
-    }
-}
-
-class NameTable {
-
-    constructor(nes, x, y, index) {
-        this.nes = nes;
-        this.x = x;
-        this.y = y;
-        this.index = index;
-    }
-}
-
-class PaletteTable {
-
-    constructor(nes) {
-        this.nes = nes;
-    }
-
-    loadDefaultTable() {
-
-    }
-
-    loadNTSCPalette() {
-
     }
 }
 
