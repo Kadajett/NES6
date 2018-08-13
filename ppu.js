@@ -301,7 +301,7 @@ class PPU {
                 }
 
                 if(!!this.f_bgVisibility || !!this.f_spVisibility) {
-                    this.nes.mmap.clockIrqCounter();
+                    this.nes.mapper.clockIrqCounter();
                 }
                 break;
             
@@ -342,7 +342,7 @@ class PPU {
 
                 if(this.f_bgVisibility == 1 || this.f_spVisibility == 1) {
                     // clock mapper irq counter. Whatever that means...
-                    this.nes.mmap.clockIrqCounter();
+                    this.nes.mapper.clockIrqCounter();
                 }
         }
 
@@ -551,6 +551,74 @@ class PPU {
         this.spriteRamWriteUpdate(this.sramAddress, value);
         this.sramAddress++;
         this.sramAddress %= 0x100;
+    }
+
+    /**
+     * CPU Register $2006
+     * Sets the address used when reading/writing from/to VRAM.
+     * this first write sets the high byte, the second, the low byte
+     * I still dislike the use of the firstWrite flag so heavily. Maybe I am missing something? 
+     * @param {number} address 
+     */
+    writeVRAMAddress(address) {
+
+        if(this.firstWrite) {
+            this.regFV = (address>>4)&3;
+            this.regV = (address>>3)&1;
+            this.regH (address>>2)&1;
+            this.regVT = (this.regVT&7) | ((address&3)<<3);
+
+        } else {
+            this.triggerRendering();
+
+            this.regVT = this.regVT&24 | ((address>>5)&7);
+            this.regHT = address&31;
+
+            this.cntFV = this.regFV;
+            this.cntV = this.regV;
+            this.cntH = this.regH;
+            this.cntVT = this.regVT;
+            this.cntHT = this.regHT;
+            // why -20? 
+            this.checkSprite0(this.scanline - 20);
+        }
+
+        this.firstWrite = !this.firstWrite;
+
+        this.cntsToAddress();
+        if(this.vramAddress < 0x2000) {
+            this.nes.mapper.latchAddress(this.vramAddress);
+        }
+    }
+
+    /**
+     * CPU Register $2005
+     * write to scroll registers
+     * this first write is the horizontal offset, the second is the vertical offset.
+     * TODO: I would prefer if this didn't use the firstWrite flag, but took two parameters
+     * @param {*} value 
+     * @param {boolean} firstWrite
+     */
+    scrollWrite(value) {
+        this.triggerRendering();
+        console.log('PPU; scrollWrite: value:', value);
+        if(this.firstWrite) {
+            // horizontal
+
+            // 31..toString(2) => 1111 
+            // What would this value be? 
+            this.regHT = (value>>3)&31;
+            // 7..toString(2) => 111
+            this.regFH = value&7;
+        } else {
+            // vertical
+
+            this.regFV = value&7;
+            this.regVT = (value>>3)&31;
+
+        }
+
+        this.firstWrite = !this.firstWrite;
     }
 
     spriteRamWriteUpdate(address, value) {
