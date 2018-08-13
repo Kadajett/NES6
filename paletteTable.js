@@ -10,6 +10,15 @@ class PaletteTable {
         this.nes = nes;
     }
 
+    /**
+     * 
+     * @param {boolean} f_color color flag in PPU.js
+     * only ever called from updateControlReg2
+     */
+    setEmphasis(f_color) {
+
+    }
+
     loadDefaultTable() {
 
     }

@@ -49,7 +49,7 @@ class PPU {
         this.scanline = 0;
         this.lastRenderedScanline = -1;
         this.curX = 0;
-        this.palTable = this.PaletteTable();
+        this.palTable = new PaletteTable();
         this.palTable.loadNTSCPalette();
 
         this.updateControlReg1(0);
@@ -105,6 +105,10 @@ class PPU {
     resetCounters() {
         /**
          * Registers
+         * https://wiki.nesdev.com/w/index.php/PPU_registers
+         * The PPU exposes eight memory-mapped registers to the CPU. 
+         * These nominally sit at $2000 through $2007 in the CPU's address space, but because they're incompletely decoded, 
+         * they're mirrored in every 8 bytes from $2008 through $3FFF, so a write to $3456 is the same as a write to $2006.
          */
         this.regV = this.regFV = this.regFH = this.regH = this.regVT = this.regHT = this.regFH = this.regS = 0;
 
@@ -118,17 +122,20 @@ class PPU {
     }
 
     resetVramIO() {
-         // VRAM I/O
-         this.vramAddress = null;
-         this.vramTmpAddress = null;
-         this.vramBufferedReadValue = 0;
-         this.firstWrite = true; // VRAM/Scroll Hi/Lo latch
- 
-         this.sramAddress = 0; // 8-bit only
-         this.currentMirroring = -1;
-         this.requestEndFrame = false;
-         this.nmiOk = 0;
-         this.scanlineAlreadyRendered = null;
+        // VRAM I/O
+        this.vramAddress = null;
+        this.vramTmpAddress = null;
+        this.vramBufferedReadValue = 0;
+        this.firstWrite = true; // VRAM/Scroll Hi/Lo latch
+        
+        /**
+        * 8-bit only
+        */
+        this.sramAddress = 0;
+        this.currentMirroring = -1;
+        this.requestEndFrame = false;
+        this.nmiOk = 0;
+        this.scanlineAlreadyRendered = null;
     }
 
     resetSpriteData() {
@@ -146,7 +153,7 @@ class PPU {
         this.ntable1 = this.nameTable = new Array(4);
         this.currentMirroring = -1;
         this.nameTable.forEach((nt) => {
-            nt = this.NameTable(32, 32, "Nt"+1);
+            nt = new NameTable(this.nes, 32, 32, "Nt"+1);
         });
         this.vramMirrorTable = new Array(0x8000);
         this.vramMirrorTable.forEach((vmt, index) => {
@@ -224,6 +231,9 @@ class PPU {
         }
     }
 
+    /**
+     * Not written yet! It'll be cool though I bet. 
+     */
     triggerRendering() {
 
     }
@@ -441,6 +451,47 @@ class PPU {
         }
     }
 
+    /**
+     * This changes all the flag values
+     * I copied this over from jsnes. From what I can tell, it is only ever taking an argument of 1. 
+     * This will essentially set all flags to 0 aside from the regh value
+     * @param { number } value 
+     * @return null
+     */
+    updateControlReg1(value) {
+        this.triggerRendering();
+
+        this.f_nmiOnVblank = (value>>7)&1;
+        this.f_spriteSize = (value>>5)&1;
+        this.f_bgPatternTable = (value>>4)&1;
+        this.f_spPatternTable = (value>>3)&1;
+        this.f_addrInc = (value>>2)&1;
+        this.f_nTblAddress = value&3;
+
+        this.regV = (value>>1)&1;
+        this.regH = value&1;
+        this.regS = (value>>4)&1;
+    }
+    // Can I combine these functions?
+    updateControlReg2(value) {
+        this.triggerRendering();
+
+        this.f_color = (value>>5)&7;
+        this.f_spVisibility = (value>>4)&1;
+        this.f_bgVisibility = (value>>3)&1;
+        this.f_spClipping = (value>>2)&1;
+        this.f_bgClipping = (value>>1)&1;
+        this.f_dispType = value&1;
+
+        if(this.f_dispType === 0) {
+            this.palTable.setEmphasis(this.f_color);
+        }
+
+        this.updatePalettes()
+    }
+
+    updatePalettes() {}
+
     regsToAddress() {
 
     }
@@ -457,10 +508,53 @@ class PPU {
         // @TODO: Do this
     }
 
-    setStatusFlag(title, flag) {
-        if(typeof title === 'boolean' && typeof flag === 'boolean') {
-            title = flag;
-        }
+    /**
+     * Sets value at the given memory location 
+     * @param {number} flag location of the flag in memory. See table towards top of this file.
+     * @param {number} value
+     */
+    setStatusFlag(flag, value) {
+        // Should add a timer here. Suspect this is a bottleneck. 
+        let n = 1<<flag;
+        this.nes.cpu.mems[0x2002] = ((this.nes.cpu.mem[0x2002] & (255 - n)) | (value?n:0));
+    }
+
+    readStatusRegister() {
+        let tmp = this.nes.cpu.mem[0x2002];
+
+        this.firstWrite = true;
+
+        this.setStatusFlag(this.STATUS_VBLANK, false);
+
+        return tmp;
+    }
+
+    writeSRAMAddress(address) {
+        this.sramAddress = address;
+    }
+
+    /**
+     * CPU Register $2004
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#OAM_data_.28.242004.29_.3C.3E_read.2Fwrite
+     */
+    sramLoad() {
+        return this.spriteMem[this.sramAddress];
+    }
+
+    /**
+     * CPU Register $2004
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#OAM_data_.28.242004.29_.3C.3E_read.2Fwrite
+     * @param {} value 
+     */
+    sramWrite(value) {
+        this.spriteMem[this.sramAddress] = value;
+        this.spriteRamWriteUpdate(this.sramAddress, value);
+        this.sramAddress++;
+        this.sramAddress %= 0x100;
+    }
+
+    spriteRamWriteUpdate(address, value) {
+
     }
 
     resetLastRenderedScanline() {
