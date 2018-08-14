@@ -612,6 +612,7 @@ class PPU {
 
     /**
      * CPU Register $2007(Read)
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#Data_.28.242007.29_.3C.3E_read.2Fwrite
      * Read from PPU memory. The address should be set first?
      */
     vramLoad() {
@@ -659,6 +660,7 @@ class PPU {
     /**
      * CPU Register $2007{Write}
      * Write value to current vramAddress location. Weird that you cant specify. Will probably go back and change it
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#Data_.28.242007.29_.3C.3E_read.2Fwrite
      * @param {number} value 
      */
     vramWrite(value) {
@@ -682,12 +684,44 @@ class PPU {
         this.regsFromAddress();
         this.cntsFromAddress();
     }
+
+    /**
+     * CPU register $4014
+     * Write 256 bytes of main memory into sprite ram
+     * Copies from cpu memory into the PPU sprite memory
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#OAM_DMA_.28.244014.29_.3E_write
+     * OAMDMA Common Name
+     * @param {number} value 
+     */
+    sramDMA(value) {
+        let baseAddress,
+            data,
+            i;
+        
+        baseAddress = value * 0x100;
+
+        for(i = this.sramAddress; i < 256; i++) {
+            data = this.nes.cpu.mem[baseAddress + 1];
+            // why are we modifying both of these
+            this.spriteMem[i] = data;
+            this.spriteRamWriteUpdate(i, data);
+        }
+
+        // The CPU is suspended during the transfer, which will take 513 or 514 cycles after the $4014 write tick. 
+        // (1 dummy read cycle while waiting for writes to complete, +1 if on an odd CPU cycle, then 256 alternating read/write cycles.)
+        this.nes.cpu.haltCycles(513)
+    }
     
     /**
      * increment by either 1 or 32, depending on d2? of Control Register 1: 
      * this is always incremented by the same amount. Why?
      * I don't like the idea of incrememting our current memory address every time we load or write from it.
      * You will see a similar increment in the vramWrite below. 
+     * 
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#Data_.28.242007.29_.3C.3E_read.2Fwrite
+     * https://wiki.nesdev.com/w/index.php/PPU_registers#Reg2000
+     * 
+     * VRAM read/write data register. After access, the video memory address will increment by an amount determined by $2000:2.
      */
     incrementVRamAddress(){
         this.vramAddress += (this.f_addrInc == 1 ? 32 : 1);
@@ -720,10 +754,22 @@ class PPU {
     }
 
     /**
-     * What does this do? Describe later
+     * Updates the scroll registers from a new VRAM address.
+     * seems to be called whenever you modify the vramAddress var
+     * https://wiki.nesdev.com/w/index.php/PPU_registers
      */
     regsFromAddress() {
+        // 0xff -> 255 -> 11111111
+        // should come back and see what vramTmpAddress possible values are
+        let address = (this.vramTmpAddress>>8)&0xFF;
+        this.regFV = (address>>4)&7; // 7..toString(2) -> 111
+        this.regV = (address>>3)&1; // 1..toString(2) -> 1
+        this.regH = (address>>2)&1;
+        this.regVT = (this.regVT&7) | ((address>>5)&7)
 
+        address = this.vramTmpAddress&0xFF; // 0xFF -> 255;
+        this.regVT = (this.regVT&24) | ((address>>5)&7);
+        this.regHT = address&31; // 31..toString(2) -> 11111
     }
 
     /**

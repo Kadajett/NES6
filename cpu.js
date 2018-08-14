@@ -121,6 +121,15 @@
             // @TODO: write the interrupt logic
         }
 
+        /**
+         * This is the same thing as reauestIrq I believe. 
+         * @link {function} requestIrq
+         * @param {number} numberOfCycles 
+         */
+        haltCycles(numberOfCycles) {
+
+        }
+
         getProcessorFlags() {
             return +this.carryFlag | +this.zeroFlag << 1 | +this.interruptDisable << 2 | +this.decimalModeFlag << 3 | +this.breakCommand << 4 | 0x20 | +this.overflowFlag << 6 | +this.negativeFlag << 7;
         }
@@ -140,6 +149,8 @@
             }       
             return this.nes.mapper.load(address) | (this.nes.mapper.load(address + 1) << 8);
         }
+
+
     }
 
     module.exports = CPU;
