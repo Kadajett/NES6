@@ -1,12 +1,19 @@
-/**
- * PPU Picture Processing Unit
- * https://wiki.nesdev.com/w/index.php/PPU
- */
+'use strict';
 
 const { Tile } = require('./tile');
 const { NameTable } = require('./nameTable');
 const { PaletteTable } = require('./paletteTable');
 
+/**
+ * PPU Picture Processing Unit
+ * The NES PPU, or Picture Processing Unit, generates a composite video signal with 240 lines of pixels, 
+ * designed to be received by a television. When the Famicom chipset was designed in the early 1980s, 
+ * it was considered quite an advanced 2D picture generator for video games.
+ * https://wiki.nesdev.com/w/index.php/PPU
+ * @class
+ * @alias module:PPU
+ * @param {object} nes The current running nes class
+ */
 class PPU {
 
     constructor(nes) {
@@ -35,6 +42,9 @@ class PPU {
         this.reset();
     }
 
+    /**
+     * Resets or creates the various variables used by the PPU
+     */
     reset() {
         this.resetVramIO();
         this.resetVramSpriteMem();
@@ -626,8 +636,8 @@ class PPU {
                 this.nes.mapper.latchAccess(this.vramAddress);
             }
 
-            // increment by either 1 or 32, depending on d2? of Control Register 1:
-            this.vramAddress += (this.f_addrInc == 1? 32 : 1);
+            
+            this.incrementVRamAddress()
 
             this.cntsFromAddress();
             this.regsFromAddress();
@@ -638,9 +648,7 @@ class PPU {
         // no buffering in this mem range. Read normally?
         tmp = this.mirrordLoad(this.vramAddress);
 
-        // I don't like the idea of incrememting our current memory address every time we load or write from it.
-        // You will see a similar increment in the vramWrite below. 
-        this.vramAddress += (this.f_addrInc == 1 ? 32  : 1);
+        this.incrementVRamAddress();
 
         this.cntsFromAddress();
         this.regsFromAddress();
@@ -660,13 +668,33 @@ class PPU {
         this.regsToAddress();
 
         if(this.vramAddress >= 0x2000) {
-            // Mirroring is being used
+            // Mirroring is being used 
             this.mirroredWrite(this.vramAddress, value);
+        } else {
+
+            // Write normally
+            this.writeMem(this.vramAddress, value);
+
+            this.nes.mapper.latchAccess(this.vramAddress);
         }
+
+        this.incrementVRamAddress();
+        this.regsFromAddress();
+        this.cntsFromAddress();
+    }
+    
+    /**
+     * increment by either 1 or 32, depending on d2? of Control Register 1: 
+     * this is always incremented by the same amount. Why?
+     * I don't like the idea of incrememting our current memory address every time we load or write from it.
+     * You will see a similar increment in the vramWrite below. 
+     */
+    incrementVRamAddress(){
+        this.vramAddress += (this.f_addrInc == 1 ? 32 : 1);
     }
 
     /**
-     * 
+     * https://wiki.nesdev.com/w/index.php/Mirroring
      * @param {number} address location in mirrored space to write value to
      * @param {Blob} value value to write at location
      */
