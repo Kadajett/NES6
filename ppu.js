@@ -68,15 +68,18 @@ class PPU {
     }
 
     resetVramSpriteMem() {
-         // Zero out vram and spriteMem
-         this.vramMem = new Array(0x8000) // 32768 Found references to this all over rom files and nes dev. no exact description though. 
-         this.spriteMem = new Array(0x100)
-         this.vramMem.forEach((element) => {
-             element = 0;
-         });
-         this.spriteMem.forEach((element) => {
-             element = 0;
-         });
+        // Zero out vram and spriteMem
+        /**
+         *  32768 Found references to this all over rom files and nes dev. no exact description though
+         */
+        this.vramMem = new Array(0x8000) 
+        this.spriteMem = new Array(0x100)
+        this.vramMem.forEach((element) => {
+            element = 0;
+        });
+        this.spriteMem.forEach((element) => {
+            element = 0;
+        });
     }
 
     // f_ denotes a flag. usually a boolean value. 
@@ -492,10 +495,16 @@ class PPU {
 
     updatePalettes() {}
 
+    /**
+     * used all over the place. Document when possible
+     */
     regsToAddress() {
 
     }
 
+    /**
+     * Used all over the place. Document when possible
+     */
     cntsToAddress() {
 
     }
@@ -587,8 +596,114 @@ class PPU {
 
         this.cntsToAddress();
         if(this.vramAddress < 0x2000) {
-            this.nes.mapper.latchAddress(this.vramAddress);
+            this.nes.mapper.latchAccess(this.vramAddress);
         }
+    }
+
+    /**
+     * CPU Register $2007(Read)
+     * Read from PPU memory. The address should be set first?
+     */
+    vramLoad() {
+        let tmp;
+
+        this.cntsToAddress();
+        this.regsToAddress();
+
+        // If address is in range of 0x0000-0x3EFF, return buffered values:
+        if(this.vramAddress <= 0X3EFF) {
+            tmp = this.vramBufferedReadValue;
+
+            // Update buffered values
+            if(this.vramAddress <= 0x2000) {
+                this.vramBufferedReadValue = this.vramMem[this.vramAddress];
+            } else {
+                this.vramBufferedReadValue = this.mirrordLoad(this.vramAddress);
+            }
+
+            // Mapper latch access
+            if(this.vramAddress < 0x2000) {
+                this.nes.mapper.latchAccess(this.vramAddress);
+            }
+
+            // increment by either 1 or 32, depending on d2? of Control Register 1:
+            this.vramAddress += (this.f_addrInc == 1? 32 : 1);
+
+            this.cntsFromAddress();
+            this.regsFromAddress();
+
+            return tmp;
+        }
+
+        // no buffering in this mem range. Read normally?
+        tmp = this.mirrordLoad(this.vramAddress);
+
+        // I don't like the idea of incrememting our current memory address every time we load or write from it.
+        // You will see a similar increment in the vramWrite below. 
+        this.vramAddress += (this.f_addrInc == 1 ? 32  : 1);
+
+        this.cntsFromAddress();
+        this.regsFromAddress();
+
+        return tmp;
+    }
+
+    /**
+     * CPU Register $2007{Write}
+     * Write value to current vramAddress location. Weird that you cant specify. Will probably go back and change it
+     * @param {number} value 
+     */
+    vramWrite(value) {
+
+        this.triggerRendering();
+        this.cntsToAddress();
+        this.regsToAddress();
+
+        if(this.vramAddress >= 0x2000) {
+            // Mirroring is being used
+            this.mirroredWrite(this.vramAddress, value);
+        }
+    }
+
+    /**
+     * 
+     * @param {number} address location in mirrored space to write value to
+     * @param {Blob} value value to write at location
+     */
+    mirroredWrite(address, value) {
+
+    }
+
+    /**
+     * Not sure what this does yet. Come back and describe
+     */
+    cntsFromAddress() {
+
+    }
+
+    /**
+     * 
+     * @param {number} address Location in memory to write value to
+     * @param {Blob} value value to write in memory address
+     */
+    writeMem(address, value) {
+
+        this.vramMem[address] = value; // or something like that
+    }
+
+    /**
+     * What does this do? Describe later
+     */
+    regsFromAddress() {
+
+    }
+
+    /**
+     * 
+     * @param {number} address 
+     */
+    mirrordLoad(address) {
+
     }
 
     /**
