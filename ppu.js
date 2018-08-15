@@ -56,6 +56,10 @@ class PPU {
 
         // misc resets
         this.curNt = null;
+        /**
+         * http://forums.nesdev.com/viewtopic.php?p=112424#p112424
+         * TODO: watch the possible values here and document them
+         */
         this.scanline = 0;
         this.lastRenderedScanline = -1;
         this.curX = 0;
@@ -842,11 +846,12 @@ class PPU {
     }
 
     /**
-     * 
-     * @param {number} address 
+     * Reads from memory, taking into account mirroring/mapping of address ranges
+     * Refactor this
+     * @param {number} address address to load from
      */
     mirrordLoad(address) {
-
+        return this.vramMem[this.vramMirrorTable[address]];
     }
 
     /**
