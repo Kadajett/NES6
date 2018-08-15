@@ -3,6 +3,7 @@
 const { Tile } = require('./tile');
 const { NameTable } = require('./nameTable');
 const { PaletteTable } = require('./paletteTable');
+const log = require('loglevel');
 
 /**
  * PPU Picture Processing Unit
@@ -103,8 +104,8 @@ class PPU {
          */
         this.f_nmiOnVblank = 0;
         /**
-         * possible values of
-         * 0=8x8, 1=8x16
+         * The NES PPU offers the choice of 8x8 pixel or 8x16 pixel sprites. Each size has its advantages.
+         * https://wiki.nesdev.com/w/index.php/Sprite_size
          */
         this.f_spriteSize = 0; 
         this.f_bgPatternTable = 0;
@@ -193,7 +194,8 @@ class PPU {
             vmt = i;
         });
 
-        // https://opcode-defined.quora.com/How-NES-Graphics-Work-Sprites-and-Palettes Is the best resource for learning about this. Drink some whiskey before you get into it. 
+        // https://opcode-defined.quora.com/How-NES-Graphics-Work-Sprites-and-Palettes Is the best resource for learning about this. 
+        // Drink some whiskey before you get into it. 
         this.defineMirrorRegion(0x3F20, 0x3F00, 0x20);
         this.defineMirrorRegion(0x3F40, 0x3F00, 0x20);
         this.defineMirrorRegion(0x3F80, 0x3F00, 0x20);
@@ -255,8 +257,15 @@ class PPU {
 
     }
 
+    /**
+     * This is the place to start if you are trying to learn about memory mirroring. Very simple topic. 
+     * https://wiki.nesdev.com/w/index.php/Mirroring
+     * @param {number} fromStart mirrored address in the mirror table 
+     * @param {number} toStart the non-mirrored address in memory that we are going to be mirroring to
+     * @param {number} size the number of spaces in the memory array that we will be mirroring
+     */
     defineMirrorRegion(fromStart, toStart, size) {
-        // think of this like a piston array. It mirrors at specific places through the engine non sequentially. 
+        
         for(let i = 0; i < size; i++) {
             this.vramMirrorTable[fromStart+i] = toStart+i;
         }
@@ -718,12 +727,43 @@ class PPU {
     }
 
     /**
+     * Writes to memory, taking into account mirroring/mapping of address ranges
      * https://wiki.nesdev.com/w/index.php/Mirroring
+     * 
+     * Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C. 
+     * Note that this goes for writing as well as reading. A symptom of not having implemented this correctly 
+     * in an emulator is the sky being black in Super Mario Bros., 
+     * which writes the backdrop color through $3F10.
      * @param {number} address location in mirrored space to write value to
      * @param {Blob} value value to write at location
      */
     mirroredWrite(address, value) {
+        if(address >= 0x3F00 && address < 0x3F20) {
+            // Palette write mirroring
+            // Come back and rewrite using these: this.defineMirrorRegion(0x3F00, 0x3F10, 1);
+            // https://wiki.nesdev.com/w/index.php/PPU_palettes
+            if(address == 0x3F00 || address == 0x3F10) {
+                this.writeMem(0x3F00, value);
+                this.writeMem(0x3F10, value);
+            } else if(address == 0x3F04 || address == 0x3F14) {
+                this.writeMem(0x3F04, value);
+                this.writeMem(0x3F14, value);
+            } else if(address == 0x3F08 || address == 0x3F18) {
+                this.writeMem(0x3F08, value);
+                this.writeMem(0x3F18, value);
+            } else if(address == 0x3F0C || address == 0x3F1C) {
+                this.writeMem(0x3F0C, value);
+                this.writeMem(0x3F1C, value);
+            } else {
+                this.writeMem(address, value);
+            }
+        } else {
+            if(address < this.vramMirrorTable.length) {
+                this.writeMem(this.vramMirrorTable[address], value);
+            } else {
 
+            }
+        }
     }
 
     /**
