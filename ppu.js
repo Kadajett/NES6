@@ -505,20 +505,6 @@ class PPU {
 
     updatePalettes() {}
 
-    /**
-     * used all over the place. Document when possible
-     */
-    regsToAddress() {
-
-    }
-
-    /**
-     * Used all over the place. Document when possible
-     */
-    cntsToAddress() {
-
-    }
-
     checkSprite0(line) {
         // @TODO: do this
     }
@@ -737,10 +723,93 @@ class PPU {
     }
 
     /**
-     * Not sure what this does yet. Come back and describe
+     * Updates the scroll registers from the new vramAddress
+     * https://wiki.nesdev.com/w/index.php/PPU_registers
+     * https://wiki.nesdev.com/w/index.php/PPU_scrolling ? maybe related, but cool wiki page
+     * very similar to PPU.regsFromAddress()
      */
     cntsFromAddress() {
+        let address = (this.vramAddress>>8)&0xFF;
+        this.cntFV = (address>>4)&3; // 3..toString(2) -> 11
+        this.cntV = (address>>3)&1;
+        this.cntH = (address>>2)&1;
+        this.cntVT = (this.cntVT&7) | ((address>>5)&7);
 
+        address = this.vramAddress&0xFF;
+        this.cntVT = (this.cntVT&24) | ((address>>5)&7);
+        this.cntHT = address&31;
+    }
+
+    /**
+     * Updates the scroll registers from the new vramAddress
+     * https://wiki.nesdev.com/w/index.php/PPU_registers
+     * https://wiki.nesdev.com/w/index.php/PPU_scrolling ? maybe related, but cool wiki page
+     * very similar to PPU.regsFromAddress()
+     */
+    regsToAddress() {
+        let b1,
+            b2;
+        
+        b1 = (this.regFV&7)<<4;
+        // |= -> https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Assignment_Operators#Bitwise_OR_assignment_2
+        b1 |= (this.regV&1)<<3;
+        b1 |= (this.regH&1)<<2;
+        b1 |= (this.regVT>>3)&3;
+
+        b2 = (this.regVT&7)<<5;
+        b2 |= this.regHT&31;
+
+        this.vramTmpAddress = ((b1<<8) | b2)&0x7FFF; // 32767
+
+    }
+
+    /**
+     * Updates the scroll registers from a new VRAM address.
+     * seems to be called whenever you modify the vramAddress var
+     * https://wiki.nesdev.com/w/index.php/PPU_registers
+     */
+    cntsToAddress() {
+        let b1,
+            b2;
+        
+        b1 = (this.cntFV&7)<<4;
+        // |= -> https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Assignment_Operators#Bitwise_OR_assignment_2
+        b1 |= (this.cntV&1)<<3;
+        b1 |= (this.cntH&1)<<2;
+        b1 |= (this.cntVT>>3)&3;
+
+        b2 = (this.cntVT&7)<<5;
+        b2 |= this.cntHT&31;
+
+        this.vramTmpAddress = ((b1<<8) | b2)&0x7FFF; // 32767
+    }
+
+    /**
+     * This needs to be refactored... Suuuu ugly
+     * @param {number} count number of times to increment the counters
+     */
+    incTileCounter(count) {
+        let i;
+
+        for(i=count; i!==0; i--) {
+            this.cntHT++;
+            if(this.cntHT == 32) {
+                this.cntHT = 0;
+                this.cntVT++;
+                if(this.cntVT >= 30) {
+                    this.cntH++;
+                    if(this.cntH == 0) {
+                        this.cntH = 0;
+                        this.cntV++;
+                        if(this.cntV == 2) {
+                            this.cntV = 0;
+                            this.cntFV++;
+                            this.cntFV &= 0x7;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
