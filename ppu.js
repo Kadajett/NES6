@@ -25,6 +25,7 @@ class PPU {
         this.STATUS_SLSSPRITECOUNT = 5;
         this.STATUS_SPRITE0HIT = 6;
         this.STATUS_VBLANK = 7;
+        this.maxPixels = 0xF000;
 
         // Rendering Options:
         this.showSpr0Hit = false;
@@ -39,6 +40,8 @@ class PPU {
             green: 0x00FF00,
             blue: 0xFF0000
         };
+
+
         
         this.reset();
     }
@@ -251,10 +254,13 @@ class PPU {
     }
 
     /**
-     * Not written yet! It'll be cool though I bet. 
+     * renders current scanline and then increments.  
      */
     triggerRendering() {
-
+        if(this.scanline >= 21 && this.scanline <= 260) {
+            this.renderFramePartially(this.lastRenderedScanline + 1, this.scanline - 21 - this.lastRenderedScanline);
+            this.lastRenderedScanline = this.scanline - 21;
+        }
     }
 
     /**
@@ -761,7 +767,8 @@ class PPU {
             if(address < this.vramMirrorTable.length) {
                 this.writeMem(this.vramMirrorTable[address], value);
             } else {
-
+                // invalid write location. 
+                log.error('PPU; MirroredWrite: Invalid VRAM write address: ', address.toString(16));
             }
         }
     }
@@ -933,8 +940,47 @@ class PPU {
         this.lastRenderedScanline = -1;
     }
 
-    renderFramePartially(startLine, stopLine) {
-        // @TODO: finish this
+    /**
+     * This actually writes to the buffer. 
+     * @param {number} startScan 
+     * @param {number} scanCount 
+     */
+    renderFramePartially(startScan, scanCount) {
+        
+        if(this.f_bgVisibility == 1) {
+            let si = startScan<<8,
+                ei = (startScan + scanCount<<8),
+                destIndex,
+                buffer = this.buffer,
+                bgBuffer = this.bgbuffer,
+                pixrendered = this.pixrendered;
+
+            if(ei > this.maxPixels) {
+                ei = this.maxPixels;
+            }
+            for(destIndex = si; destIndex < ei; destIndex++) {
+                if(pixrendered[destIndex] > 0xFF) {
+                    buffer[destIndex] = bgBuffer[destIndex];
+                }
+            }
+
+        }
+        // this was duplicated above the bg renderer as well as here. If we see weird issues in display, look there?
+        if(this.f_spVisibility == 1) {
+            this.renderSpritesPartially(startScan, scanCount, true);
+        }
+
+        this.validTileData = false;
+    }
+
+    /**
+     * 
+     * @param {number} scanLine 
+     * @param {number} scanCount 
+     * @param {boolean} bl
+     */
+    renderSpritesPartially(scanLine, scanCount, bl) {
+
     }
 
     NameTable(x, y, index) {

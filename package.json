@@ -18,5 +18,8 @@
     "@babel/core": "^7.0.0-beta.55",
     "babelify": "^9.0.0",
     "nodemon": "^1.18.3"
+  },
+  "dependencies": {
+    "loglevel": "^1.6.1"
   }
 }
