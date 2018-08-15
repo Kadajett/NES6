@@ -470,7 +470,7 @@ class PPU {
         }
 
         if(this.clipToTvSize) {
-            for(y = 0; y < 8 y++) {
+            for(y = 0; y < 8; y++) {
                 for(x = 0; x < this.bufferSize.x; x++) {
                     buffer[(y << 8) + x] = 0;
                     buffer[((239 - y) << 8) + x] = 0;

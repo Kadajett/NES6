@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "npm test",
-    "start": "nohup watchify index.js -o compact.js -v -t [ babelify --presets [ '@babel/preset-env', '@babel/preset-react' ]] &>/dev/null &"
+    "watch": "nohup watchify index.js -o compact.js -v -t [ babelify --presets [ '@babel/preset-env', '@babel/preset-react' ]] &>/dev/null &",
+    "start": "http-server"
   },
   "keywords": [
     "nes",
