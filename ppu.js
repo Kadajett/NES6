@@ -27,6 +27,9 @@ class PPU {
         this.STATUS_SPRITE0HIT = 6;
         this.STATUS_VBLANK = 7;
         this.maxPixels = 0xF000;
+        // used in renderSpritePartially
+        this.srcy1;
+        this.srcy2;
 
         // Rendering Options:
         this.showSpr0Hit = false;
@@ -1088,12 +1091,108 @@ class PPU {
 
     /**
      * 
-     * @param {number} scanLine 
-     * @param {number} scanCount 
-     * @param {boolean} bl
+     * @param {*} startScan 
+     * @param {*} scanCount 
+     * @param {*} bgPri 
      */
-    renderSpritesPartially(scanLine, scanCount, bl) {
+    renderSpritesPartially(startScan, scanCount, bgPri) {
+        let top;
+        if(this.f_spVisibility === 1) {
+            for(let i = 0; i < 64; i++) {
+                if(this.bgPriority[i] == bgPri && 
+                    this.sprX[i]>=0 && 
+                    this.sprX[i] < 256 && 
+                    this.sprY[i] + 8 >= startScan && 
+                    this.sprY[i]<startScan+scanCount) {
+                        // show sprite?
 
+                        if(this.f_spriteSize === 0) {
+                            this.srcy1 = 0;
+                            this.srcy2 = 8;
+
+                            if(this.sprY[i] < startScan) {
+                                this.srcy1 = startScan - this.sprY[i] - 1;
+                            }
+
+                            if(this.sprY[i]+8 > startScan + scanCount) {
+                                this.srcy2 = startScan + scanCount - this.sprY[i] + 1;
+                            }
+
+                            if(this.f_spPatternTable === 0) {
+                                // copy pastaaaaaaaa
+                                // Hella arguments
+                                this.ptTile[this.sprTile[i]].render(this.buffer, 0, this.srcy1, 8, this.srcy2, 
+                                    this.sprX[i], this.sprY[i] + 1, this.sprCol[i], 
+                                    this.sprPalette, this.horiFlip[i], this.vertFlip[i], i, this.pixrendered);
+                            } else {
+                                this.ptTile[this.sprTile[i] + 256].render(this.buffer, 0, this.srcy1, 8, this.srcy2, this.sprX[i], 
+                                    this.this.sprY[i] + 1, this.sprCol[i], this.sprPalette, this.horiFlip[i], this.vertFlip[i], i, this.pixrendered);
+                            }
+                        } else {
+                            // 8x16 sprites
+                            top = this.sprTile[i];
+                            if((top&1) !== 0) {
+                                top = this.sprTile[i] + 255;
+                            }
+
+                            this.srcy1 = 0;
+                            this.srcy2 = 8;
+
+                            if(this.sprY[i] < startScan) {
+                                srcy1 = startScan - this.sprY[i] - 1;
+                            }
+
+                            if(this.sprY[i] + 8 > startScan + scanCount) {
+                                srcy2 = startScan + scanCount - this.sprY[i];
+                            }
+
+                            this.ptTile[top + (this.vertFlip[i] ? 1 : 0)].render(
+                                this.buffer,
+                                0,
+                                this.srcy1,
+                                8,
+                                this.srcy2,
+                                this.sprX[i],
+                                this.sprY[i] + 1,
+                                this.sprCol[i],
+                                this.sprPalette,
+                                this.horiFlip[i],
+                                this.vertFlip[i],
+                                i,
+                                this.pixrendered
+                            );
+
+                            this.srcy1 = 0;
+                            this.srcy2 = 8;
+
+                            if(this.sprY[i] + 8 < startScan) {
+                                srcy1 = startScan - (this.sprY[i] + 8 + 1);
+                            }
+
+                            if(this.sprY[i] + 8 > startScan + scanCount) {
+                                srcy2 = startScan + scanCount - (this.sprY[i] + 8);
+                            }
+
+                            this.ptTile[top + (this.vertFlip[i] ? 1 : 0)].render(
+                                this.buffer,
+                                0,
+                                this.srcy1,
+                                8,
+                                this.srcy2,
+                                this.sprX[i],
+                                this.sprY[i] + 1 + 8,
+                                this.sprCol[i],
+                                this.sprPalette,
+                                this.horiFlip[i],
+                                this.vertFlip[i],
+                                i,
+                                this.pixrendered
+                            );
+
+                        }
+                    }
+            }
+        }
     }
 
     NameTable(x, y, index) {
