@@ -1,4 +1,8 @@
-(()=>{
+    const Util = require('./util');
+    
+    /**
+     * 6502!!! Look it up!
+     */
     class CPU {
         constructor (nes) {
             this.nes = nes;
@@ -11,7 +15,7 @@
             /*
             * The available memory space for our nes
             */
-            this.memory = Array(0x10000);
+            this.memory = Util.fillArray(new Array(0x10000));
 
             // Registers
             // Program Counter PC (16 bit)
@@ -81,7 +85,7 @@
 
         reset () {
             
-            this.memory = Array(0x10000);
+            this.memory = Util.fillArray(new Array(0x10000));
 
             this.carryFlag = false;
             this.zeroFlag = false;
@@ -102,7 +106,7 @@
             let i;
 
             for(i = 0; i <= 0x2000; i++) {
-                this.memory[i] = 0xFF
+                this.memory[i] = 0xFF;
             }
             for(i = 0x2000; i <= 0x8000; i++) {
                 this.memory[i] = 0;
@@ -154,4 +158,3 @@
     }
 
     module.exports = CPU;
-})()

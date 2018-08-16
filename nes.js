@@ -7,6 +7,7 @@ const ROM = require('./rom');
 const PPU = require('./ppu');
 
 
+
 class NES {
         constructor() {
             this.isRunning = false;
@@ -19,13 +20,19 @@ class NES {
             this.cpu = new CPU(this);
             this.rom = new ROM(this);
             this.ppu = new PPU(this);
+
+            this.loadRom()
             // this.program = null;
         }
 
+        /**
+         * load the game!
+         * @param {blob} data 
+         */
         loadProgram (data) {
-            this.program = new Program(this);
-            this.program.load(data);
-            this.reset();
+            // this.program = new Program(this);
+            // this.program.load(data);
+            // this.reset();
         }
 
         start() {
@@ -89,7 +96,7 @@ class NES {
                 }
                 
                 this.mmap.loadRom();
-                this.ppu.setMirroring(this.rom.getMirroringType());
+                this.ppu.setMirroring(this.rom.getMirroringType() || 0);
                 this.romData = data;
 
                 // sussessfully loaded rom data...

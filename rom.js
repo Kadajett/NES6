@@ -1,9 +1,13 @@
+const Util = require('./util');
+/**
+ * 
+ */
 class ROM {
 
     constructor(nes) {
         this.nes = nes;
 
-        this.mapperName = new Array(92);
+        this.mapperName = Util.fillArray(new Array(92));
         this.clearMapper();
         this.writeMapper();
         this.createMirroringTypes();
@@ -102,15 +106,15 @@ class ROM {
                 return new Error('Not a valid NES ROM. Missing NES Header')
             }
 
-            this.header = new Array(16);
+            this.header = Util.fillArray(new Array(16));
             // I thought this bitwise operator only returned 1 or 0... It is returning the char code if not zero...
             this.header.forEach((header, index) => {
-                header = data.charCodeAt(index) & 0xFF
+                header = data.charCodeAt(index) & 0xFF;
             });
 
             // this is all super specific. Not going to explain it all, but if you look up example rom files, this will make sense... Hopefully.
             this.romCount = this.header[4];
-            this.vromCount = this.header[5]*2 //Getting the number of 4kb banks, not 8kb
+            this.vromCount = this.header[5]*2; //Getting the number of 4kb banks, not 8kb
             this.mirroring = ((this.header[6] & 1) !== 0 ?1: 0);
             this.batteryRam = (this.header[6] & 2) !== 0;
             this.trainer = (this.header[6] & 4) !== 0;
@@ -130,10 +134,10 @@ class ROM {
             }
 
             // Load PRG-ROM banks... Whatever that means
-            this.rom = new Array(this.romCount);
+            this.rom = Util.fillArray(new Array(this.romCount));
             this.rom.forEach((rom, index) => {
                 // https://wiki.nesdev.com/w/index.php/NES_2.0 
-                rom = new Array(prgRomSize);
+                rom = Util.fillArray(new Array(prgRomSize));
                 rom.forEach((el, i) => {
                     if(offset+i >= data.length) {
                         // I need to break out of this, but I will just return for now and waste the cycles
@@ -146,9 +150,9 @@ class ROM {
                 offset += prgRomSize;
             });
 
-            this.vrom = new Array(this.vromCount);
+            this.vrom = Util.fillArray(new Array(this.vromCount));
             this.vrom.forEach((x, xIndex) => {
-                x = new Array(chrRomSize);
+                x = Util.fillArray(new Array(chrRomSize));
                 x.forEach((y, yIndex) => {
                     if(offset+yIndex > data.length) {
                         // I need to break out of this, but I will just return for now and waste the cycles
@@ -160,13 +164,13 @@ class ROM {
             });
 
             // Create vrom tiles
-            this.vromTile = new Array(this.vromCount);
+            this.vromTile = Util.fillArray(new Array(this.vromCount));
             this.vromTile.forEach((x, xIndex) => {
-                // @TODO: figure out why this magic number is here and what it does. 
-                x = new Array(256);
+                // 256 is the total number of tiles wide
+                x = Util.fillArray(new Array(256));
                 x.forEach((y, yIndex) => {
                     // calls new seperately. 
-                    y = this.nes.PPU.Tile(this.nes);
+                    y = this.nes.ppu.Tile(this.nes);
                 });
             });
 

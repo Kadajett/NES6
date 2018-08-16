@@ -3,6 +3,7 @@
 const { Tile } = require('./tile');
 const { NameTable } = require('./nameTable');
 const { PaletteTable } = require('./paletteTable');
+const Util = require('./util');
 const log = require('loglevel');
 
 /**
@@ -75,14 +76,18 @@ class PPU {
     }
 
     resetRenderingVars() {
-        this.attrib = this.scantile = new Array(32);
+        this.attrib = this.scantile = Util.fillArray(new Array(32));
         this.bufferSize = {
             x: 256,
             y: 240
         }
-        this.buffer = this.prevBuffer = this.bgbuffer = this.pixrendered = new Array(this.bufferSize.x * this.bufferSize.y);
+        this.buffer = Util.fillArray(new Array(this.bufferSize.x * this.bufferSize.y))
+        this.prevBuffer = Util.fillArray(new Array(this.bufferSize.x * this.bufferSize.y))
+        this.bgbuffer = Util.fillArray(new Array(this.bufferSize.x * this.bufferSize.y))
+        this.pixrendered = Util.fillArray(new Array(this.bufferSize.x * this.bufferSize.y));
         this.validTileData = null;
-        this.sprPalette = this.imgPalette = new Array(16);
+        this.sprPalette = Util.fillArray(new Array(16));
+        this.imgPalette = Util.fillArray(new Array(16));
     }
 
     resetVramSpriteMem() {
@@ -90,8 +95,8 @@ class PPU {
         /**
          *  32768 Found references to this all over rom files and nes dev. no exact description though
          */
-        this.vramMem = new Array(0x8000) 
-        this.spriteMem = new Array(0x100)
+        this.vramMem = Util.fillArray(new Array(0x8000)); 
+        this.spriteMem = Util.fillArray(new Array(0x100));
         this.vramMem.forEach((element) => {
             element = 0;
         });
@@ -160,25 +165,32 @@ class PPU {
     }
 
     resetSpriteData() {
-        this.sprX = this.sprY = this.sprTile = this.sprCol = this.vertFlip = this.horiFlip = this.bgPriority = new Array(64);
+        this.sprX = Util.fillArray(new Array(64))
+        this.sprY = Util.fillArray(new Array(64))
+        this.sprTile = Util.fillArray(new Array(64))
+        this.sprCol = Util.fillArray(new Array(64))
+        this.vertFlip = Util.fillArray(new Array(64))
+        this.horiFlip = Util.fillArray(new Array(64))
+        this.bgPriority = Util.fillArray(new Array(64));
         this.spr0HitX = this.spr0HitY = 0;
         this.hitSpr0 = false;
     }
 
     resetTileTableBuffers() {
-        this.ptTile = new Array(512);
+        this.ptTile = Util.fillArray(new Array(512));
         this.ptTile.forEach((tile) => {
             tile = this.Tile(this.nes);
         });
 
-        this.ntable1 = this.nameTable = new Array(4);
+        this.ntable1 = Util.fillArray(new Array(4)) 
+        this.nameTable = Util.fillArray(new Array(4));
         this.currentMirroring = -1;
-        this.nameTable.forEach((nt) => {
-            nt = new NameTable(this.nes, 32, 32, "Nt"+1);
+        this.nameTable.forEach((nt, index, array) => {
+            array[index] = this.NameTable( 32, 32, "Nt"+1);
         });
-        this.vramMirrorTable = new Array(0x8000);
-        this.vramMirrorTable.forEach((vmt, index) => {
-            vmt = index; // I think I am resetting this incorrectly. Will have to wait and see.
+        this.vramMirrorTable = Util.fillArray(new Array(0x8000));
+        this.vramMirrorTable.forEach((vmt, index, array) => {
+            array[index] = index;
         });
     }
 
@@ -191,10 +203,10 @@ class PPU {
         this.triggerRendering();
 
         if(this.vramMirrorTable === null) {
-            this.vramMirrorTable = new Array(0x8000);
+            this.vramMirrorTable = Util.fillArray(new Array(0x8000));
         }
-        this.vramMirrorTable.forEach((vmt, index) => {
-            vmt = i;
+        this.vramMirrorTable.forEach((vmt, index, array) => {
+            array[index] = index;
         });
 
         // https://opcode-defined.quora.com/How-NES-Graphics-Work-Sprites-and-Palettes Is the best resource for learning about this. 
@@ -528,8 +540,104 @@ class PPU {
         // @TODO: do this
     }
 
-    renderBGScanline() {
-        // @TODO: Do this
+    /**
+     * rewrite this plzbb
+     * @param {Array} bgBuffer 
+     * @param {Blob} scan 
+     */
+    renderBGScanline(bgBuffer, scan) {
+        let baseTile = (this.regS === 0 ? 0 : 256),
+            destIndex = (scan<<8), // 1? 256>>8 = 00000001
+            resetTileTableBuffers,
+            tile,
+            t,
+            sx,
+            x,
+            tpix, 
+            att, 
+            col,
+            tscanOffset = this.cntFV<<3,
+            scantile = this.scantile,
+            attrib = this.attrib,
+            ptTile = this.ptTile,
+            nameTable = this.nameTable,
+            imgPalette = this.imgPalette,
+            pixrendered = this.pixrendered,
+            targetBuffer = bgBuffer ? this.bgbuffer : this.buffer;
+        
+        this.cntHT = this.regHT;
+        this.cntH = this.regH;
+        // lol why?
+        this.curNt = this.ntable1[this.cntV+this.cntV+this.cntH];
+        
+        if(scan < 240 && (scan-this.cntFV)>=0) {
+            for(tile = 0; tile < 32; tile ++) {
+                if(scan>=0){
+                    // fetch tile and attrib data
+                    if(this.validTileData) {
+                        t = scantile[tile];
+                        tpix = t.pix;
+                        att = attrib[tile];
+                    } else {
+                        t = ptTile[baseTile+nameTable[this.curNt].getTileIndex(this.cntHT, this.cntVT)];
+                        tpix = t.pix;
+                        att = nameTable[this.curNt].getAttrib(this.cntHT, this.cntVT);
+                        scantile[tile] = t;
+                        attrib[tile] = att;
+                    }
+
+                    sx = 0;
+                    x = (tile << 3) - this.regFH; 
+
+                    if(x>-8) {
+                        if(x<0) {
+                            destIndex -= x; // += -(-x) lol
+                            sx = -x;
+                        }
+                        if(t.opaque[this.cntFV]) {
+                            for(;sx<8;sx++) {
+                                targetBuffer[destIndex] = imgPalette[tpix[tscanOffset+sx] + att];
+                                pixrendered[destIndex] |= 256;
+                                destIndex++;
+                            }
+                        } else {
+                            for(; sx< 8; sx++) {
+                                col = tpix[tscanOffset + sx];
+                                if(col !== 0) {
+                                    targetBuffer[destIndex] = imgPalette[col+att];
+                                    pixrendered[destIndex] |= 256;
+                                }
+                                destIndex ++;
+                            }
+                        }
+                    }
+                }
+                if(++this.cntHT==32) {
+                    this.cntHT = 0;
+                    this.cntH ++;
+                    this.cntH%=2;
+                    this.curNt = this.ntable1[(this.cntV<<1) + this.cntH];
+                }
+            }
+            
+            this.validTileData = true;
+        }
+
+        this.cntFV++;
+        if(this.cntFV == 8) {
+            this.cntFV = 0;
+            this.cntVT++;
+            if(this.cntVT == 30) {
+                this.cntVT = 0;
+                this.cntV++;
+                this.cntV%=2;
+                this.curNt = this.ntable1[(this.cntV<<1) + this.cntH];
+            } else if(this.cntVT == 32) {
+                this.cntVT = 0;
+            }
+            // arbitrary?
+            this.validTileData = false;
+        }
     }
 
     /**
@@ -947,6 +1055,10 @@ class PPU {
      */
     renderFramePartially(startScan, scanCount) {
         
+        // if(this.f_spVisibility == 1) {
+        //     this.renderSpritesPartially(startScan, scanCount, true);
+        // }
+
         if(this.f_bgVisibility == 1) {
             let si = startScan<<8,
                 ei = (startScan + scanCount<<8),
@@ -970,6 +1082,7 @@ class PPU {
             this.renderSpritesPartially(startScan, scanCount, true);
         }
 
+        // Why are we doing this?
         this.validTileData = false;
     }
 

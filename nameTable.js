@@ -21,6 +21,25 @@ class NameTable {
         this.y = y;
         this.index = index;
     }
+
+    /**
+     * used in ppu?
+     * Finish this!
+     * @param {number} ht 
+     * @param {number} vt 
+     */
+    getTileIndex(ht, vt) {
+        return 0;
+    }
+
+    /**
+     * 
+     * @param {number} ht 
+     * @param {number} vt 
+     */
+    getAttrib(ht, vt) {
+
+    }
 }
 
 module.exports.NameTable = NameTable;
