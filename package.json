@@ -16,7 +16,7 @@
   "author": "kadajett (jermy.ryan.stover@gmail.com)",
   "license": "ISC",
   "devDependencies": {
-    "@babel/core": "^7.0.0-beta.55",
+    "@babel/core": "^7.20.7",
     "babelify": "^9.0.0",
     "nodemon": "^1.18.3"
   },
